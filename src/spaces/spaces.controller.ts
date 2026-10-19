@@ -1,0 +1,105 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { SpacesService } from './spaces.service';
+import { CreateSpaceDto } from './dto/create-space.dto';
+import { UpdateSpaceDto } from './dto/update-space.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { VerifiedGuard } from '../auth/guards/verified.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+@ApiTags('Spaces')
+@Controller('spaces')
+export class SpacesController {
+  constructor(private readonly spacesService: SpacesService) {}
+
+  /**
+   * Endpoint de criação de espaços.
+   * Protegido por JwtAuthGuard - requer token Bearer JWT.
+   */
+  @ApiOperation({ summary: 'Cria um novo espaço para locação' })
+  @ApiBody({ type: CreateSpaceDto })
+  @ApiResponse({ status: 201, description: 'Espaço criado com sucesso.' })
+  @UseGuards(JwtAuthGuard, VerifiedGuard)
+  @Post()
+  async create(
+    @CurrentUser('id') userId: string,
+    @Body() createSpaceDto: CreateSpaceDto,
+  ) {
+    return this.spacesService.create(userId, createSpaceDto);
+  }
+
+  /**
+   * Listagem pública de espaços disponíveis (Catálogo Explorar).
+   * Não filtra pelo usuário logado; exibe todos os espaços ativos.
+   */
+  @Get()
+  async findAll(
+    @Query('activeOnly') activeOnly?: string,
+    @Query('q') q?: string,
+    @Query('includeDeleted') includeDeleted?: string,
+  ) {
+    const isFiltered = activeOnly !== undefined ? activeOnly === 'true' : true;
+    const isIncludeDeleted = includeDeleted !== undefined ? includeDeleted === 'true' : false;
+    return this.spacesService.findAll(isFiltered, q, isIncludeDeleted);
+  }
+
+  /**
+   * Listagem de anúncios próprios do usuário autenticado (anfitrião).
+   * Obtém a identidade estritamente do token JWT autenticado.
+   */
+  @UseGuards(JwtAuthGuard, VerifiedGuard)
+  @Get('mine')
+  async findMine(@CurrentUser('id') userId: string) {
+    return this.spacesService.findByOwner(userId);
+  }
+
+  /**
+   * Detalhes de um espaço específico.
+   */
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get(':id')
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() user?: { id: string; role: string },
+  ) {
+    return this.spacesService.findOne(id, user);
+  }
+
+  /**
+   * Atualização de um espaço.
+   * Rota protegida por autenticação.
+   */
+  @UseGuards(JwtAuthGuard, VerifiedGuard)
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+    @Body() updateSpaceDto: UpdateSpaceDto,
+  ) {
+    return this.spacesService.update(id, user.id, user.role, updateSpaceDto);
+  }
+
+  /**
+   * Desativação de um espaço.
+   * Rota protegida por autenticação.
+   */
+  @UseGuards(JwtAuthGuard, VerifiedGuard)
+  @Delete(':id')
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.spacesService.remove(id, user.id, user.role);
+  }
+}
